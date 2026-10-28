@@ -1,16 +1,25 @@
-## Installation
+## Сборка для IZ2S
 
-1. Install and configure [IZ2W / IZ2S Platform](https://github.com/byizmysh/IZ2S-Platform).
-2. Download and extract one of the source archives below. Install Python 3, Clang/LLD with RISC-V support, llvm-objcopy, glslangValidator and spirv-val.
-3. Supply your own **DOOM1.WAD** and run this from the extracted `IZDOOM` folder:
+[**Скачать IZDOOM-v0.17.1-IZ2S.izm**](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/IZDOOM-v0.17.1-IZ2S.izm)
 
-```sh
-python3 build.py --wad "/path/to/DOOM1.WAD" --output build
-```
+1. Установите и настройте [IZ2S Platform](https://github.com/byizmysh/IZ2S-Platform).
+2. Скопируйте скачанный `.izm` в `<папка IZ2S>/modules/izdoom/izdoom.izm`, создав папку `izdoom` при необходимости.
+3. Обновите библиотеку в панели, выберите IZDOOM и загрузите модуль на консоль.
+4. Откройте IZDOOM в меню на консоли.
 
-4. Copy `build/izdoom.izm` to `<IZ2S Platform folder>/modules/izdoom/izdoom.izm`.
-5. Refresh IZ2W Panel, select and load IZDOOM, then open it in the console launcher.
+Готовая сборка уже содержит данные первого эпизода. Компиляторы и отдельные файлы данных для установки не нужны.
 
-[Full installation instructions](https://github.com/byizmysh/IZDOOM/blob/main/INSTALL.md) are also attached below as `INSTALL.md`.
+[**Инструкция по установке**](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/INSTALL-IZ2S.md)
 
-**About DOOM1.WAD:** it contains the original game's maps, textures, sprites and other resources. The release includes the port's source code, not those game-data files. The WAD is embedded into your module during the build and read from console memory during play.
+## Исходники
+
+[**Скачать «Исходники»**](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/IZDOOM-v0.17.1-%D0%98%D1%81%D1%85%D0%BE%D0%B4%D0%BD%D0%B8%D0%BA%D0%B8.zip)
+
+Полный исходный код движка и порта, шейдеры, инструменты сборки, иконка и лицензии. Этот архив предназначен для самостоятельной сборки; для обычной установки используйте `.izm` выше.
+
+[**Инструкция по сборке из исходников**](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/BUILD-FROM-SOURCE.md)
+
+## English
+
+- **Ready-to-load IZ2S module:** download the `.izm` above, copy it as `modules/izdoom/izdoom.izm` inside IZ2S Platform, refresh the app library and load/open IZDOOM. Episode-one data is included. [Installation guide](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/INSTALL-IZ2S.md).
+- **Sources:** download **Исходники / Sources**, extract and follow the [build guide](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/BUILD-FROM-SOURCE.md). All corresponding engine, shader and build sources are included; the original game data can be extracted from the ready module.

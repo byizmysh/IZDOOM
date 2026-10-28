@@ -1,0 +1,13 @@
+{
+  "file": "game-data/DOOM1.WAD",
+  "variant": "DOOM shareware v1.9, episode one",
+  "bytes": 4196020,
+  "md5": "f0cefca49926d00903cf57551d901abe",
+  "sha256": "1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771",
+  "originalBytesPreserved": true,
+  "licenseSource": "https://sources.debian.org/data/non-free/d/doom-wad-shareware/1.9.fixed-4/debian/copyright",
+  "licenseFile": "LICENSES/DOOM1-SHAREWARE.txt",
+  "licenseFileSha256": "1482321ff0640a41f039d771f7a2abe62b32ff76f6fd458c291cb981df94d083",
+  "sourceArchiveIncludesGameData": false,
+  "prebuiltModuleIncludesGameData": true
+}

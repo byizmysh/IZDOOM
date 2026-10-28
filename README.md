@@ -6,26 +6,17 @@
 
 An unofficial DOOM-derived GPU port for the [IZ2W / IZ2S Platform](https://github.com/byizmysh/IZ2S-Platform), by IZMYSH contributors.
 
-Game logic runs in an RV32 interpreter on the console GPU; shaders render the world, sprites, HUD and transitions. Sound effects and music are not yet implemented. The module has no host audio service, BlitBun dependency or PC audio processing. The ordinary IZ2W platform is still required to load and run the module.
+Game logic runs in an RV32 interpreter on the console GPU; shaders render the world, sprites, HUD and transitions. Sound effects and music are not yet implemented. The ordinary IZ2W platform is still required to load and run the module.
 
-## Installation
+## Downloads and installation
 
-Follow [INSTALL.md](INSTALL.md) to build a local module and add it to IZ2W Panel. The release downloads contain source code; supply your own DOOM1.WAD game-data file.
-
-## Build
-
-Requirements: Python 3, Clang with RISC-V target and LLD, llvm-objcopy, glslangValidator and spirv-val. No network access is required by the build. Supply your own legally obtained DOOM1.WAD:
-
-```sh
-python3 build.py --wad /path/to/DOOM1.WAD --output build
-```
-
-The resulting `build/izdoom.izm` can be imported into IZ2W Panel. This source release includes the original pinned PureDOOM header, modified engine, patch, all guest/shader sources, SDK interface headers and build/asset preparation tools.
+- **IZ2S build (.izm):** download `IZDOOM-v0.17.1-IZ2S.izm` from [Releases](https://github.com/byizmysh/IZDOOM/releases/tag/v0.17.1) and follow [INSTALL-IZ2S.md](INSTALL-IZ2S.md). Game data is included; no separate data file or compiler is required.
+- **Исходники / Sources:** download the source archive from the same release and follow [BUILD-FROM-SOURCE.md](BUILD-FROM-SOURCE.md). Complete engine, shader and build sources are included.
 
 ## Licensing and data
 
 IZDOOM remains a DOOM-derived port, not a clean-room original game. The combined source is distributed under GPL version 2; component notices and additional grants are described in LICENSE-SCOPE.md, NOTICE.md and docs/LICENSING.md. A standalone GitHub repository may be used with the required notices and complete corresponding source; GitHub's Fork button is not a license requirement.
 
-**No IWAD, extracted game art, memory image or playable module containing game data is included in the public source archive.** Local build outputs embed your supplied data; separate redistribution rights are required before publishing those outputs.
+The source archive excludes game data. The ready-to-load IZ2S module includes the original DOOM shareware v1.9 first-episode data under its separate terms. See [LICENSES/DOOM1-SHAREWARE.txt](LICENSES/DOOM1-SHAREWARE.txt) for the license and redistribution clarification. Retail DOOM data is not included.
 
 This is an unofficial project, not endorsed by id Software.

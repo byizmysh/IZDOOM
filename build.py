@@ -52,7 +52,9 @@ def main():
     for name in ['app.json','state.bin','data.bin']:shutil.copy2(ROOT/'assets'/name,sw/name)
     shutil.copy2(ROOT/'assets/izdoom-icon.png',sw/'icon.png')
     (sw/'memory.bin.deflate').write_bytes(zlib.compress(memory,6))
-    for name in ['module.json','LICENSE','COPYRIGHT','NOTICE.md','LICENSE-SCOPE.md','THIRD_PARTY.json','README.md']:
+    game_data=package/'game-data';game_data.mkdir(exist_ok=True)
+    (game_data/'DOOM1.WAD').write_bytes(wad)
+    for name in ['module.json','LICENSE','COPYRIGHT','NOTICE.md','LICENSE-SCOPE.md','THIRD_PARTY.json','README.md','INSTALL-IZ2S.md','BUILD-FROM-SOURCE.md']:
         shutil.copy2(ROOT/name,package/name)
     shutil.copytree(ROOT/'LICENSES',package/'LICENSES',dirs_exist_ok=True)
     entries={p.relative_to(package).as_posix():p.read_bytes() for p in sorted(package.rglob('*'))if p.is_file()and p.name!='checksums.json'}

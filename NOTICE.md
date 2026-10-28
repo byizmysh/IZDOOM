@@ -16,7 +16,7 @@
 - **IZ2W SDK interface headers**: copyright 2026 IZMYSH contributors; MIT
   permission and disclaimer are retained in `LICENSES/IZ2W-SDK-MIT.txt`.
 - **Game data**: IWAD resources are owned/licensed separately by their owners.
-  None are supplied in this public source distribution. New icon artwork is
+  The source archive excludes IWAD data. The prebuilt module preserves the original DOOM shareware v1.9 IWAD, with its separate license and redistribution clarification in `LICENSES/DOOM1-SHAREWARE.txt`. New icon artwork is
   original vector work and does not contain official DOOM artwork.
 
 The historical DOOM Source Code License notice still appears in the upstream

@@ -38,15 +38,25 @@ PureDOOM is also possible, but would not make the source obligations disappear.
 
 ## IWAD and release artifacts
 
-The source license is not a license to redistribute DOOM game data. The local
-demonstration module embeds DOOM1.WAD plus generated textures and other derived game data.
-That local module is not the public GitHub release asset prepared here.
+The source license does not grant rights over DOOM game data. The source
+archives exclude the IWAD and derived runtime memory/resources. The separate
+prebuilt IZ2S module contains DOOM shareware v1.9 episode one, not a retail IWAD.
 
-The public source archives exclude IWADs, extracted assets, captures, memory
-images and playable asset-bearing modules. `build.py --wad ...` reconstructs
-the module from game data supplied by its user. No assumption is made here
-that extracting shareware resources and repacking them into another module
-is allowed under the original shareware distribution terms.
+The supplied 4,196,020-byte IWAD has MD5 f0cefca49926d00903cf57551d901abe
+and SHA-256 1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771.
+Its original bytes are preserved both in the guest memory image and as
+`game-data/DOOM1.WAD` for rebuilding. Generated indexed resources are runtime
+representations of the same first-episode game content.
+
+The Debian copyright record for doom-wad-shareware retains the id Software
+license and John Carmack's 1999 clarification allowing distribution of the
+DOOM shareware WAD:
+https://sources.debian.org/src/doom-wad-shareware/1.9.fixed-4/debian/copyright/
+
+That record is included verbatim as LICENSES/DOOM1-SHAREWARE.txt, with its
+source and hash in docs/shareware-data.json. Game data keeps its own terms;
+this is not a GPL grant over maps, textures, sprites, sounds or trademarks.
+The prebuilt download is free of charge and includes no retail game data.
 
 ## Name and artwork
 

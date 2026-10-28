@@ -11,8 +11,11 @@ MIT-licensed SDK interface files retain their existing MIT permission.
 
 The GPL does not cover the IWAD's maps, textures, sprites, sounds or music by
 virtue of covering the engine. No game data is distributed in the public
-source archive. Build outputs derived from a supplied IWAD require separate
-data redistribution rights before they can be published.
+source archive. The prebuilt IZ2S module includes the original DOOM shareware v1.9 episode-one
+IWAD under its separate id Software terms and the redistribution clarification
+recorded in LICENSES/DOOM1-SHAREWARE.txt. This data is not relicensed under GPL.
+The original IWAD bytes are preserved, and retail DOOM IWADs are not included.
+Other user-supplied data requires its own redistribution rights.
 
 This summary identifies the licenses selected for this distribution; the
 complete license texts and preserved component notices control their terms.

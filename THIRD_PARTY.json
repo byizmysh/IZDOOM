@@ -34,10 +34,17 @@
       "licenseFile": "LICENSES/IZ2W-SDK-MIT.txt"
     },
     {
-      "name": "IWAD game data",
-      "paths": [],
-      "distributed": false,
-      "license": "User must supply separately licensed data"
+      "name": "DOOM shareware v1.9 game data",
+      "paths": [
+        "game-data/DOOM1.WAD",
+        "switch/memory.bin.deflate"
+      ],
+      "distributedInSourceArchive": false,
+      "distributedInPrebuiltModule": true,
+      "copyright": "id Software",
+      "license": "id Software shareware terms with redistribution clarification",
+      "licenseFile": "LICENSES/DOOM1-SHAREWARE.txt",
+      "sha256": "1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771"
     }
   ]
 }
