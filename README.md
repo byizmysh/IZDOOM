@@ -11,7 +11,7 @@ Game logic runs in an RV32 interpreter on the console GPU; shaders render the wo
 ## Downloads and installation
 
 - **IZ2S build (.izm):** download `IZDOOM-v0.17.1-IZ2S.izm` from [Releases](https://github.com/byizmysh/IZDOOM/releases/tag/v0.17.1) and follow [INSTALL-IZ2S.md](INSTALL-IZ2S.md). Game data is included; no separate data file or compiler is required.
-- **Исходники / Sources:** download the source archive from the same release and follow [BUILD-FROM-SOURCE.md](BUILD-FROM-SOURCE.md). Complete engine, shader and build sources, the icon, licenses and original episode-one game data are included.
+- **Source code:** download the source archive from the same release and follow [BUILD-FROM-SOURCE.md](BUILD-FROM-SOURCE.md). Complete engine, shader and build sources, the icon, licenses and original episode-one game data are included.
 
 ## Licensing and data
 
