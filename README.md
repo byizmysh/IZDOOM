@@ -6,9 +6,11 @@
 
 An unofficial DOOM-derived GPU port for the [IZ2W / IZ2S Platform](https://github.com/byizmysh/IZ2S-Platform), by IZMYSH contributors.
 
-This release includes full textures, the original sprites and HUD, and smoother GPU level transitions. It retains the accepted movement fixes, reduces analog movement/turn sensitivity by 20%, removes the central crosshair, and uses the IZDOOM icon with a small IZMYSH credit.
-
 Game logic runs in an RV32 interpreter on the console GPU; shaders render the world, sprites, HUD and transitions. Sound effects and music are not yet implemented. The module has no host audio service, BlitBun dependency or PC audio processing. The ordinary IZ2W platform is still required to load and run the module.
+
+## Installation
+
+Follow [INSTALL.md](INSTALL.md) to build a local module and add it to IZ2W Panel. The release downloads contain source code; supply your own DOOM1.WAD game-data file.
 
 ## Build
 
