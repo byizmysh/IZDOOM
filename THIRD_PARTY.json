@@ -1,0 +1,43 @@
+{
+  "components": [
+    {
+      "name": "DOOM / PureDOOM engine",
+      "paths": [
+        "vendor/PureDOOM.h",
+        "engine/PureDOOM-izdoom.h",
+        "patches/PureDOOM-izdoom.patch"
+      ],
+      "license": "GPL-2.0",
+      "upstream": "https://github.com/Daivuk/PureDOOM",
+      "commit": "355cfbd16fac119718879239336ee2ea408886bd",
+      "notices": "Historical DOOM notice preserved verbatim; pinned repository GPL license included"
+    },
+    {
+      "name": "IZMYSH integration and icon",
+      "paths": [
+        "src",
+        "shaders",
+        "tools",
+        "build.py",
+        "assets/izdoom-icon.svg",
+        "assets/izdoom-icon.png"
+      ],
+      "license": "GPL-2.0-or-later",
+      "copyright": "2026 IZMYSH contributors"
+    },
+    {
+      "name": "IZ2W SDK interface headers",
+      "paths": [
+        "sdk/include"
+      ],
+      "license": "MIT",
+      "licenseFile": "LICENSES/IZ2W-SDK-MIT.txt"
+    },
+    {
+      "name": "IWAD game data",
+      "paths": [],
+      "distributed": false,
+      "license": "User must supply separately licensed data"
+    }
+  ]
+}

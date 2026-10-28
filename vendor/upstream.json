@@ -1,0 +1,8 @@
+{
+  "project": "Daivuk/PureDOOM",
+  "commit": "355cfbd16fac119718879239336ee2ea408886bd",
+  "url": "https://raw.githubusercontent.com/Daivuk/PureDOOM/355cfbd16fac119718879239336ee2ea408886bd/PureDOOM.h",
+  "sha256": "ec16ce721436bf3fa4c338320afedd56a93c0b563a94ebf283718503c71ca780",
+  "license": "GPL-2.0 license file in pinned upstream repository; historical DOOM source notice retained in header",
+  "licenseUrl": "https://raw.githubusercontent.com/Daivuk/PureDOOM/355cfbd16fac119718879239336ee2ea408886bd/LICENSE"
+}

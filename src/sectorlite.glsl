@@ -1,0 +1,403 @@
+// All addresses below are offsets into app-owned VM data, never native addresses.
+const uint SCENE=0x400u, COUNTS=0x13f0000u, HITS=0x1400000u;
+const uint MAX_HITS=128u,HIT_BYTES=32u;
+const uint ACTORS=0x1601000u,ACTOR_IDS=0x1610000u,ACTOR_STATE=0x1600000u;
+const uint MAX_ACTORS=256u,ACTOR_BYTES=48u,MAX_OVERLAP=64u;
+const uint ASSETS=0x1800000u,ASSET_LIMIT=0x1f00000u;
+const uint WORLD_SCALE=1u,WORLD_WIDTH=320u,WORLD_HEIGHT=200u,WORLD_PIXELS=64000u,WORLD_COLORS=0x1700000u;
+const float WORLD_SAMPLE=0.5;
+const uint INTERVAL_COUNTS=0x13f0800u,INTERVALS=0x1540000u,INTERVAL_BYTES=16u;
+// Structure-of-arrays: adjacent columns read adjacent words in a GPU warp.
+#define HIT(x,h,w) MEM(HITS+(((h)*8u+(w))*320u+(x))*4u)
+#define SPAN(x,h,w) MEM(INTERVALS+(((h)*4u+(w))*320u+(x))*4u)
+#define COLUMN_ACTOR(x,i) MEM(ACTOR_IDS+((i)*320u+(x))*4u)
+shared uint ready,renderError,fb,numLines,lines,sides,translations,player,numSides;
+shared uint assetEnd,texCount,textureTable,spriteCount,spriteTable,colormap;
+shared uint actorCount,health,armor,ammo,skyFlat;
+shared uint cameraSector,flatCount,flatTable,skyTexture;
+shared uint hudTable,hudCount,faceIndex,hasAmmo;
+shared float viewCenter,viewHeight;
+shared vec2 camera,forward;
+shared float eyeZ;
+shared uint weaponEntry[2];
+shared vec2 weaponOrigin[2],weaponSize[2];
+bool vmRange(uint a,uint n){return n<=LIMIT&&a<=LIMIT-n;}
+bool assetRange(uint a,uint n){return a>=ASSETS&&n<=assetEnd-ASSETS&&a<=assetEnd-n;}
+float fixedAt(uint a){return float(int(MEM(a)))/65536.0;}
+uint halfAt(uint a){return (MEM(a)>>((a&2u)*8u))&65535u;}
+int signedHalf(uint a){return int(halfAt(a)<<16u)>>16;}
+float cross2(vec2 a,vec2 b){return a.x*b.y-a.y*b.x;}
+vec2 vertexAt(uint a){return vec2(fixedAt(a),fixedAt(a+4u));}
+uint textureMeta(uint id){
+ if(id>=texCount)return 0u;
+ uint p=textureTable+id*16u;
+ return assetRange(p,16u)?p:0u;
+}
+uint translatedTexture(uint side,uint offset){
+ int raw=signedHalf(side+offset);
+ if(raw<0||uint(raw)>=texCount||!vmRange(translations+uint(raw)*4u,4u))return 0u;
+ return MEM(translations+uint(raw)*4u);
+}
+uint spriteMeta(uint sprite,uint frame,uint rotation){
+ if(sprite>=spriteCount||frame>=32u)return 0u;
+ uint p=spriteTable+((sprite*32u+frame)*8u+(rotation&7u))*4u;
+ if(!assetRange(p,4u))return 0u;
+ uint entry=MEM(p),meta=entry&0x7fffffffu;
+ return meta!=0u&&assetRange(meta,20u)?entry:0u;
+}
+uint texelAt(uint meta,int x,int y,bool wrap){
+ uint w=MEM(meta),h=MEM(meta+4u),data=MEM(meta+16u);
+ if(w==0u||h==0u||w>4096u||h>4096u||!assetRange(data,w*h*2u))return 256u;
+ if(wrap){x=((x%int(w))+int(w))%int(w);y=((y%int(h))+int(h))%int(h);}
+ else if(x<0||y<0||x>=int(w)||y>=int(h))return 256u;
+ return halfAt(data+(uint(y)*w+uint(x))*2u);
+}
+uint wallTexel(uint id,float u,float v,bool masked){
+ uint m=textureMeta(id);if(m==0u)return masked?256u:96u;
+ uint w=MEM(m),h=MEM(m+4u),data=MEM(m+12u);
+ if(w==0u||h==0u||w>4096u||h>4096u||!assetRange(data,w*h*2u))return masked?256u:96u;
+ int x=int(floor(u)),y=int(floor(v));
+ x=((x%int(w))+int(w))%int(w);
+ if(masked&&(y<0||y>=int(h)))return 256u;
+ y=((y%int(h))+int(h))%int(h);
+ uint value=halfAt(data+(uint(y)*w+uint(x))*2u);
+ // Opaque walls remain occluders even if an asset contains unpainted texels.
+ return !masked&&value==256u?0u:value;
+}
+uint lightPixel(uint index,uint light,float depth,bool fullbright){
+ uint level=fullbright?0u:min(31u,(255u-min(light,255u))/8u+uint(max(0.0,depth))/192u);
+ return byteAt(colormap+level*256u+index);
+}
+void addBand(uint x,inout uint count,float depth,float zTop,float zBottom,
+             uint texture,float u,float anchor,uint light,bool masked){
+ if(zTop<=zBottom)return;
+ float top=viewCenter-(zTop-eyeZ)*160.0/depth,bottom=viewCenter-(zBottom-eyeZ)*160.0/depth;
+ if(bottom<=0.0||top>=viewHeight)return;
+ if(count>=MAX_HITS){atomicOr(renderError,8u);return;}
+ HIT(x,count,0u)=floatBitsToUint(depth);HIT(x,count,1u)=floatBitsToUint(top);HIT(x,count,2u)=floatBitsToUint(bottom);
+ HIT(x,count,3u)=texture;HIT(x,count,4u)=floatBitsToUint(u);
+ HIT(x,count,5u)=floatBitsToUint(anchor-eyeZ-viewCenter*depth/160.0);
+ HIT(x,count,6u)=light;HIT(x,count,7u)=masked?1u:0u;count++;
+}
+float textureHeight(uint id){uint m=textureMeta(id);return m==0u?128.0:float(MEM(m+4u));}
+void addInterval(uint x,inout uint count,float nearDepth,float farDepth,uint sector){
+ if(farDepth<=nearDepth)return;
+ if(count>=MAX_HITS){atomicOr(renderError,512u);return;}
+ SPAN(x,count,0u)=floatBitsToUint(nearDepth);SPAN(x,count,1u)=floatBitsToUint(farDepth);
+ SPAN(x,count,2u)=sector;SPAN(x,count,3u)=0u;count++;
+}
+void prepareWalls(uint x){
+ vec2 ray=forward+vec2(forward.y,-forward.x)*((float(x)+WORLD_SAMPLE-160.0)/160.0);
+ uint count=0u,intervalCount=0u,current=cameraSector,previousLine=0u;
+ float intervalStart=0.0;bool terminal=false;
+ for(uint step=0u;step<MAX_HITS;step++){
+  if(!vmRange(current,88u)){atomicOr(renderError,4u);return;}
+  uint lineCount=MEM(current+80u),lineList=MEM(current+84u);
+  if(lineCount>4096u||!vmRange(lineList,lineCount*4u)){atomicOr(renderError,1024u);return;}
+  float depth=1.0e30,u=0.0;uint l=0u;
+  for(uint i=0u;i<lineCount;i++){
+   uint candidate=MEM(lineList+i*4u);
+   if(candidate<lines||candidate>=lines+numLines*64u||((candidate-lines)%64u)!=0u){atomicOr(renderError,1024u);return;}
+   if(candidate==previousLine)continue;
+   uint candidateFront=MEM(candidate+48u),candidateBack=MEM(candidate+52u);
+   if(candidateFront!=current&&candidateBack!=current){atomicOr(renderError,1024u);return;}
+   uint p1=MEM(candidate),p2=MEM(candidate+4u);
+   if(!vmRange(p1,8u)||!vmRange(p2,8u)){atomicOr(renderError,2u);return;}
+   vec2 a=vertexAt(p1),delta=vertexAt(p2)-a,relative=a-camera;
+   float den=cross2(ray,delta);if(abs(den)<0.000001)continue;
+   // Follow outward boundaries, including portals at the camera itself.
+   // The preceding line is excluded explicitly; a near-plane distance must
+   // not discard a topological sector transition.
+   if(candidateFront!=candidateBack){
+    if(candidateFront==current&&den>=0.0)continue;
+    if(candidateBack==current&&den<=0.0)continue;
+   }
+
+   float candidateDepth=cross2(relative,delta)/den,candidateU=cross2(relative,ray)/den;
+   if(candidateDepth<intervalStart-0.00001||candidateDepth>=depth||candidateU<0.0||candidateU>=1.0)continue;
+   depth=max(max(candidateDepth,intervalStart),0.00001);u=candidateU;l=candidate;
+  }
+  if(l==0u){addInterval(x,intervalCount,intervalStart,1.0e30,current);terminal=true;break;}
+  uint originalFront=MEM(l+48u),originalBack=MEM(l+52u);
+  if(current!=originalFront&&current!=originalBack)continue;
+  vec2 a=vertexAt(MEM(l)),delta=vertexAt(MEM(l+4u))-a;
+  bool reverse=current==originalBack&&current!=originalFront;
+  if(originalFront==originalBack)reverse=cross2(delta,camera-a)>0.0;
+  uint front=current,back=reverse?originalFront:originalBack;
+  addInterval(x,intervalCount,intervalStart,depth,current);
+  uint sideId=halfAt(l+(reverse?24u:22u));
+  if(sideId>=numSides||!vmRange(front,88u)||(back!=0u&&!vmRange(back,88u))){atomicOr(renderError,4u);continue;}
+  uint side=sides+sideId*20u,flags=halfAt(l+16u),light=halfAt(front+12u);
+  float uTex=(reverse?1.0-u:u)*length(delta)+fixedAt(side),rowOffset=fixedAt(side+4u);
+  float floorZ=fixedAt(front),ceilZ=fixedAt(front+4u);
+  if(back==0u){
+   uint texture=translatedTexture(side,12u);
+   float anchor=(flags&16u)!=0u?floorZ+textureHeight(texture):ceilZ;
+   addBand(x,count,depth,ceilZ,floorZ,texture,uTex,anchor+rowOffset,light,false);
+   terminal=true;break;
+  }else{
+   float backFloor=fixedAt(back),backCeil=fixedAt(back+4u);
+   bool bothSky=halfAt(front+10u)==skyFlat&&halfAt(back+10u)==skyFlat;
+   if(ceilZ>backCeil&&!bothSky){
+    uint texture=translatedTexture(side,8u);
+    float anchor=(flags&8u)!=0u?ceilZ:backCeil+textureHeight(texture);
+    addBand(x,count,depth,ceilZ,max(backCeil,floorZ),texture,uTex,anchor+rowOffset,light,false);
+   }
+   if(backFloor>floorZ){
+    uint texture=translatedTexture(side,10u);
+    float anchor=(flags&16u)!=0u?ceilZ:backFloor;
+    addBand(x,count,depth,min(backFloor,ceilZ),floorZ,texture,uTex,anchor+rowOffset,light,false);
+   }
+   if(halfAt(side+12u)!=0u){
+    uint texture=translatedTexture(side,12u);
+    float anchor=(flags&16u)!=0u?max(floorZ,backFloor)+textureHeight(texture):min(ceilZ,backCeil);
+    addBand(x,count,depth,min(ceilZ,backCeil),max(floorZ,backFloor),texture,uTex,anchor+rowOffset,light,true);
+   }
+   current=back;intervalStart=depth;previousLine=l;
+   if(min(ceilZ,backCeil)<=max(floorZ,backFloor)){terminal=true;break;}
+  }
+ }
+ if(!terminal)atomicOr(renderError,512u);
+ MEM(COUNTS+x*4u)=count;
+ MEM(INTERVAL_COUNTS+x*4u)=intervalCount;
+}
+void prepareActors(){
+ actorCount=0u;uint head=MEM(SCENE+56u),callback=MEM(SCENE+60u),own=MEM(SCENE+64u);
+ if(!vmRange(head,12u)){renderError=16u;return;}
+ uint node=MEM(head+4u),visited=0u,missing=0u;
+ while(node!=head&&visited<4096u){
+  if(!vmRange(node,156u)||node==0u){renderError=16u;return;}
+  visited++;
+  if(MEM(node+8u)==callback&&node!=own&&(MEM(node+104u)&8u)==0u){
+   vec2 offset=vec2(fixedAt(node+12u),fixedAt(node+16u))-camera;
+   float depth=dot(offset,forward);
+   if(depth>0.1){
+    float angle=atan(offset.y,offset.x)-float(MEM(node+32u))*(6.28318530718/4294967296.0)+3.53429173529;
+    uint rotation=uint(int(floor(angle*(8.0/6.28318530718)))&7);
+    uint frame=MEM(node+40u),entry=spriteMeta(MEM(node+36u),frame&0x7fffu,rotation);
+    if(entry!=0u){
+     uint meta=entry&0x7fffffffu,w=MEM(meta),h=MEM(meta+4u);
+     float scale=160.0/depth,side=dot(offset,vec2(forward.y,-forward.x));
+     float left=160.0+side*scale-float(int(MEM(meta+8u)))*scale,right=left+float(w)*scale;
+     float top=viewCenter-(fixedAt(node+20u)+float(int(MEM(meta+12u)))-eyeZ)*scale,bottom=top+float(h)*scale;
+     if(right>0.0&&left<320.0&&bottom>0.0&&top<viewHeight){
+      if(actorCount>=MAX_ACTORS){renderError=32u;return;}
+      uint q=ACTORS+actorCount*ACTOR_BYTES,sector=0u,subsector=MEM(node+52u),light=255u;
+      if(vmRange(subsector,8u)){sector=MEM(subsector);if(vmRange(sector,88u))light=halfAt(sector+12u);}
+      MEM(q)=floatBitsToUint(depth);MEM(q+4u)=floatBitsToUint(left);MEM(q+8u)=floatBitsToUint(right);
+      MEM(q+12u)=floatBitsToUint(top);MEM(q+16u)=floatBitsToUint(bottom);MEM(q+20u)=entry;
+      MEM(q+24u)=MEM(node+104u);MEM(q+28u)=light;MEM(q+32u)=frame;actorCount++;
+     }
+    }else missing++;
+   }
+  }
+  node=MEM(node+4u);
+ }
+ if(node!=head){renderError=64u;return;}
+ MEM(ACTOR_STATE)=actorCount;MEM(ACTOR_STATE+4u)=visited;MEM(ACTOR_STATE+8u)=missing;
+}
+void actorsForColumn(uint x){
+ uint count=0u;float sampleX=float(x)+WORLD_SAMPLE;
+ for(uint i=0u;i<actorCount;i++){
+  uint q=ACTORS+i*ACTOR_BYTES;
+  if(sampleX>=uintBitsToFloat(MEM(q+4u))&&sampleX<uintBitsToFloat(MEM(q+8u))){
+   if(count>=MAX_OVERLAP){atomicOr(renderError,128u);break;}
+   uint at=count;float depth=uintBitsToFloat(MEM(q));
+   while(at>0u){
+    uint previous=COLUMN_ACTOR(x,at-1u);
+    if(uintBitsToFloat(MEM(ACTORS+previous*ACTOR_BYTES))<=depth)break;
+    COLUMN_ACTOR(x,at)=previous;at--;
+   }
+   COLUMN_ACTOR(x,at)=i;count++;
+  }
+ }
+ MEM(ACTOR_STATE+64u+x*4u)=count;
+}
+void shadeActors(uint x,uint y,inout float nearest,inout uint color){
+ uint count=MEM(ACTOR_STATE+64u+x*4u);
+ for(uint i=0u;i<count;i++){
+  uint q=ACTORS+COLUMN_ACTOR(x,i)*ACTOR_BYTES;
+  float depth=uintBitsToFloat(MEM(q));if(depth>=nearest)break;
+  float left=uintBitsToFloat(MEM(q+4u)),right=uintBitsToFloat(MEM(q+8u));
+  float top=uintBitsToFloat(MEM(q+12u)),bottom=uintBitsToFloat(MEM(q+16u));
+  uint entry=MEM(q+20u),meta=entry&0x7fffffffu;
+  int tx=int(floor((float(x)+WORLD_SAMPLE-left)/(right-left)*float(MEM(meta))));
+  int ty=int(floor((float(y)+WORLD_SAMPLE-top)/(bottom-top)*float(MEM(meta+4u))));
+  if((entry&0x80000000u)!=0u)tx=int(MEM(meta))-1-tx;
+  uint texel=texelAt(meta,tx,ty,false);
+  if(texel!=256u){
+   if((MEM(q+24u)&0x40000u)!=0u&&((x/WORLD_SCALE+y/WORLD_SCALE)&1u)==0u)continue;
+   color=lightPixel(texel,MEM(q+28u),depth,(MEM(q+32u)&0x8000u)!=0u);nearest=depth;break;
+  }
+ }
+}
+void prepareWeapon(){
+ for(uint i=0u;i<2u;i++){
+  weaponEntry[i]=0u;weaponOrigin[i]=vec2(0);weaponSize[i]=vec2(0);
+  uint psp=player+244u+i*16u,state=MEM(psp);if(state==0u||!vmRange(state,8u))continue;
+  uint entry=spriteMeta(MEM(state),MEM(state+4u)&0x7fffu,0u);if(entry==0u)continue;
+  uint meta=entry&0x7fffffffu;
+  weaponEntry[i]=entry;
+  weaponOrigin[i]=vec2(fixedAt(psp+8u)-float(int(MEM(meta+8u))),fixedAt(psp+12u)-float(int(MEM(meta+12u))));
+  weaponOrigin[i].y+=viewCenter-100.0;
+  weaponSize[i]=vec2(MEM(meta),MEM(meta+4u));
+ }
+}
+void shadeWeapon(uint x,uint y,inout uint color){
+ for(uint i=0u;i<2u;i++){
+  uint entry=weaponEntry[i];if(entry==0u)continue;
+  vec2 at=vec2(float(x)+0.5,float(y)+0.5)-weaponOrigin[i];
+  if(any(lessThan(at,vec2(0)))||any(greaterThanEqual(at,weaponSize[i])))continue;
+  uint meta=entry&0x7fffffffu;int tx=int(floor(at.x)),ty=int(floor(at.y));
+  if((entry&0x80000000u)!=0u)tx=int(MEM(meta))-1-tx;
+  uint texel=texelAt(meta,tx,ty,false);if(texel!=256u)color=texel;
+ }
+}
+void shadeNumber(uint x,uint y,uint value,uint right,inout uint color){
+ value=min(value,999u);
+ for(uint digit=0u;digit<3u;digit++){
+  uint meta=MEM(ASSETS+32u+(value%10u)*4u);value/=10u;
+  int tx=int(x)-int(right)+int(digit)*14,ty=int(y)-183;
+  if(assetRange(meta,20u)){uint texel=texelAt(meta,tx,ty,false);if(texel!=256u)color=texel;}
+  if(value==0u)break;
+ }
+}
+uint hudMeta(uint index){
+ if(index>=hudCount)return 0u;
+ uint meta=MEM(hudTable+index*4u);
+ return assetRange(meta,20u)?meta:0u;
+}
+void hudPatch(uint x,uint y,uint meta,int anchorX,int anchorY,inout uint color){
+ if(meta==0u)return;
+ int tx=int(x)-anchorX+int(MEM(meta+8u)),ty=int(y)-anchorY+int(MEM(meta+12u));
+ if(tx<0||ty<0||tx>=int(MEM(meta))||ty>=int(MEM(meta+4u)))return;
+ uint texel=texelAt(meta,tx,ty,false);if(texel!=256u)color=texel;
+}
+void hudNumber(uint x,uint y,uint value,int right,int top,bool small,inout uint color){
+ if(int(y)<top||int(y)>=top+(small?6:16)||int(x)>=right||int(x)<right-(small?12:42))return;
+ value=min(value,999u);int width=small?4:14;
+ for(uint digit=0u;digit<3u;digit++){
+  uint index=value%10u;value/=10u;right-=width;
+  uint meta=small?hudMeta(4u+index):MEM(ASSETS+32u+index*4u);
+  if(assetRange(meta,20u))hudPatch(x,y,meta,right,top,color);
+  if(value==0u)break;
+ }
+}
+void shadeHud(uint x,uint y,inout uint color){
+ if(hudTable==0u||y<168u)return;
+ hudPatch(x,y,hudMeta(0u),0,168,color);
+ if(x>=104u&&x<144u)hudPatch(x,y,hudMeta(1u),104,168,color);
+ if(x<143u){
+  if(x<44u&&hasAmmo!=0u)hudNumber(x,y,ammo,44,171,false,color);
+  if(x>=48u&&x<104u){
+   hudNumber(x,y,health,90,171,false,color);hudPatch(x,y,hudMeta(2u),90,171,color);
+  }
+  if(x>=104u){
+   for(uint i=0u;i<6u;i++){
+    bool owned=MEM(player+120u+(i+1u)*4u)!=0u;
+    hudPatch(x,y,hudMeta(owned?6u+i:14u+i),111+int(i%3u)*12,172+int(i/3u)*10,color);
+   }
+  }
+ }else if(x<179u){
+  hudPatch(x,y,hudMeta(26u+faceIndex),143,168,color);
+ }else if(x<235u){
+  hudNumber(x,y,armor,221,171,false,color);hudPatch(x,y,hudMeta(2u),221,171,color);
+ }else if(x<248u){
+  for(uint i=0u;i<3u;i++){
+   uint card=MEM(player+68u+i*4u),skull=MEM(player+80u+i*4u);
+   if(card!=0u||skull!=0u)hudPatch(x,y,hudMeta(20u+i+(skull!=0u?3u:0u)),239,171+int(i)*10,color);
+  }
+ }else if(x>=276u&&y>=173u&&y<197u){
+  uint row=(y-173u)/6u,index=row==2u?3u:row==3u?2u:row;
+  int top=173+int(row)*6;
+  if(x<288u)hudNumber(x,y,MEM(player+156u+index*4u),288,top,true,color);
+  else hudNumber(x,y,MEM(player+172u+index*4u),314,top,true,color);
+ }
+}
+uint shadeWorld(uint x,uint y){
+ if(float(y)>=viewHeight)return 0u;
+ uint color=y<100u?8u:64u;
+ float nearest=3.402823e38,sampleY=float(y)+WORLD_SAMPLE;
+ vec2 ray=forward+vec2(forward.y,-forward.x)*((float(x)+WORLD_SAMPLE-160.0)/160.0);
+ uint intervals=MEM(INTERVAL_COUNTS+x*4u);
+ for(uint i=0u;i<intervals;i++){
+  uint sector=SPAN(x,i,2u);
+  bool floorSide=sampleY>viewCenter;
+  float z=fixedAt(sector+(floorSide?0u:4u));
+  float depth=(eyeZ-z)*160.0/(sampleY-viewCenter);
+  if(depth<=0.0||depth>=nearest||depth<uintBitsToFloat(SPAN(x,i,0u))||depth>uintBitsToFloat(SPAN(x,i,1u)))continue;
+  uint flatId=halfAt(sector+(floorSide?8u:10u));
+  if(!floorSide&&flatId==skyFlat){
+   float angle=atan(ray.y,ray.x);uint texel=wallTexel(skyTexture,angle*(1024.0/6.28318530718),sampleY+100.0-viewCenter,false);
+   if(texel!=256u){color=texel;nearest=depth;break;}
+  }else if(flatId<flatCount){
+   uint data=MEM(flatTable+flatId*4u);if(!assetRange(data,4096u))continue;
+   vec2 position=camera+ray*depth;
+   // Resolve float roundoff consistently at exact texel boundaries.
+   uint tx=uint(int(floor(position.x+0.0001))&63),ty=uint(int(floor(-position.y+0.0001))&63);
+   color=lightPixel(byteAt(data+ty*64u+tx),halfAt(sector+12u),depth,false);nearest=depth;break;
+  }
+ }
+ uint count=MEM(COUNTS+x*4u);
+ for(uint i=0u;i<count;i++){
+  float depth=uintBitsToFloat(HIT(x,i,0u));
+  if(depth>=nearest)break;
+  if(sampleY<uintBitsToFloat(HIT(x,i,1u))||sampleY>=uintBitsToFloat(HIT(x,i,2u)))continue;
+  uint texel=wallTexel(HIT(x,i,3u),uintBitsToFloat(HIT(x,i,4u)),uintBitsToFloat(HIT(x,i,5u))+sampleY*depth/160.0,HIT(x,i,7u)!=0u);
+  if(texel!=256u){color=lightPixel(texel,HIT(x,i,6u),depth,false);nearest=depth;break;}
+ }
+ shadeActors(x,y,nearest,color);return color;
+}
+void sectorLitePass(){
+ uint lane=gl_LocalInvocationIndex;
+ if(lane==0u){
+  ready=MEM(SCENE);renderError=0u;actorCount=0u;
+  fb=MEM(SCENE+4u);camera=vec2(fixedAt(SCENE+8u),fixedAt(SCENE+12u));eyeZ=fixedAt(SCENE+16u);
+  forward=vec2(fixedAt(SCENE+20u),fixedAt(SCENE+24u));numLines=MEM(SCENE+28u);lines=MEM(SCENE+32u);
+  health=MEM(SCENE+44u);sides=MEM(SCENE+68u);translations=MEM(SCENE+72u);player=MEM(SCENE+76u);numSides=MEM(SCENE+84u);
+  skyFlat=MEM(SCENE+92u);armor=MEM(SCENE+96u);ammo=MEM(SCENE+100u);
+  assetEnd=ASSETS+MEM(ASSETS+8u);texCount=MEM(ASSETS+12u);textureTable=MEM(ASSETS+16u);
+  spriteCount=MEM(ASSETS+20u);spriteTable=MEM(ASSETS+24u);colormap=MEM(ASSETS+28u);
+  flatCount=MEM(ASSETS+72u);flatTable=MEM(ASSETS+76u);skyTexture=MEM(ASSETS+80u);cameraSector=0u;
+  hudTable=MEM(ASSETS+84u);hudCount=MEM(ASSETS+88u);faceIndex=min(MEM(SCENE+104u),41u);hasAmmo=MEM(SCENE+108u);
+  viewCenter=hudTable!=0u?84.0:100.0;viewHeight=hudTable!=0u?168.0:200.0;
+  if(ready!=0u){
+   if(MEM(ASSETS)!=0x534c5431u||MEM(ASSETS+4u)!=1u||assetEnd<ASSETS+128u||assetEnd>ASSET_LIMIT||texCount>4096u||spriteCount>512u||!assetRange(textureTable,texCount*16u)||!assetRange(spriteTable,spriteCount*32u*8u*4u)||!assetRange(colormap,8192u))renderError=256u;
+   if(MEM(SCENE+36u)!=320u||MEM(SCENE+40u)!=200u||numLines>4096u||numSides>8192u||!vmRange(lines,numLines*64u)||!vmRange(sides,numSides*20u)||!vmRange(translations,texCount*4u)||!vmRange(player,280u)||!vmRange(fb,64000u)||(fb&3u)!=0u)renderError=1u;
+   if(flatCount==0u||flatCount>4096u||!assetRange(flatTable,flatCount*4u)||skyTexture>=texCount)renderError=256u;
+   if(hudTable!=0u&&(hudCount!=68u||!assetRange(hudTable,hudCount*4u)))renderError=256u;
+   uint own=MEM(SCENE+64u);
+   if(own==0u||!vmRange(own,156u))renderError=1u;
+   else{uint sub=MEM(own+52u);if(!vmRange(sub,8u))renderError=1u;else{cameraSector=MEM(sub);if(cameraSector==0u||!vmRange(cameraSector,88u))renderError=1u;}}
+  }
+ }
+ barrier();if(ready==0u)return;
+ if(lane==0u&&renderError==0u){prepareActors();prepareWeapon();}
+ memoryBarrierBuffer();barrier();
+ if(renderError==0u){for(uint x=lane*WORLD_SCALE;x<320u;x+=gl_WorkGroupSize.x*WORLD_SCALE){prepareWalls(x);actorsForColumn(x);}}
+ memoryBarrierBuffer();barrier();
+ if(renderError==0u){
+  for(uint p=lane;p<WORLD_PIXELS;p+=gl_WorkGroupSize.x){
+   uint x=(p%WORLD_WIDTH)*WORLD_SCALE,y=(p/WORLD_WIDTH)*WORLD_SCALE;
+   MEM(WORLD_COLORS+p*4u)=shadeWorld(x,y);
+  }
+ }
+ memoryBarrierBuffer();barrier();
+ if(renderError==0u){
+  // One lane owns every byte of its uint32 destination; no byte-RMW races.
+  for(uint word=lane;word<16000u;word+=gl_WorkGroupSize.x){
+   uint packed=0u;
+   for(uint j=0u;j<4u;j++){
+    uint pixel=word*4u+j,x=pixel%320u,y=pixel/320u;
+    uint color=MEM(WORLD_COLORS+((y/WORLD_SCALE)*WORLD_WIDTH+x/WORLD_SCALE)*4u);
+    shadeWeapon(x,y,color);
+    if(hudTable!=0u)shadeHud(x,y,color);
+    else if(y>=181u){shadeNumber(x,y,health,30u,color);shadeNumber(x,y,armor,140u,color);shadeNumber(x,y,ammo,292u,color);}
+    packed|=(color&255u)<<(j*8u);
+   }
+   MEM(fb+word*4u)=packed;
+  }
+ }
+ memoryBarrierBuffer();barrier();
+ if(lane==0u){MEM(ACTOR_STATE+12u)=renderError;if(renderError!=0u)MEM(8u)=10u;else{MEM(SCENE)=0u;if(MEM(160u)==3u)MEM(160u)=0u;}}
+}

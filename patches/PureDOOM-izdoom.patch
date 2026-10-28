@@ -1,0 +1,1207 @@
+--- vendor/PureDOOM.h
++++ engine/PureDOOM-izdoom.h
+@@ -1482,8 +1482,8 @@
+ // plus a checksum for internal state consistency.
+ typedef struct
+ {
+-    char forwardmove;   // *2048 for move
+-    char sidemove;      // *2048 for move
++    signed char forwardmove;   // *2048 for move
++    signed char sidemove;      // *2048 for move
+     short angleturn;    // <<16 for angle delta
+     short consistancy;  // checks for net game
+     byte chatchar;
+@@ -7184,26 +7184,15 @@
+ #endif
+ 
+ 
+-void doom_memset(void* ptr, int value, int num)
+-{
+-    unsigned char* p = ptr;
+-    for (int i = 0; i < num; ++i, ++p)
+-    {
+-        *p = (unsigned char)value;
+-    }
+-}
+-
+-
+-void* doom_memcpy(void* destination, const void* source, int num)
+-{
+-    unsigned char* dst = destination;
+-    const unsigned char* src = source;
+-
+-    for (int i = 0; i < num; ++i, ++dst, ++src)
+-    {
+-        *dst = *src;
+-    }
+-
++void doom_memset(void* ptr,int value,int num)
++{
++    if(num>0)dl_bulk_fill(ptr,value,(size_t)num);
++}
++
++
++void* doom_memcpy(void* destination,const void* source,int num)
++{
++    if(num>0)dl_bulk_copy(destination,source,(size_t)num);
+     return destination;
+ }
+ 
+@@ -11942,8 +11931,8 @@
+ 
+     // makes this wipe faster (in theory)
+     // to have stuff in column-major format
+-    wipe_shittyColMajorXform((short*)wipe_scr_start, width / 2, height);
+-    wipe_shittyColMajorXform((short*)wipe_scr_end, width / 2, height);
++    /* GPU melt reads the original row-major snapshot. */
++    /* GPU melt reads the original row-major snapshot. */
+ 
+     // setup initial column positions
+     // (y<0 => not ready to scroll yet)
+@@ -11963,51 +11952,21 @@
+ 
+ int wipe_doMelt(int width, int height, int ticks)
+ {
+-    int i;
+-    int j;
+-    int dy;
+-    int idx;
+-
+-    short* s;
+-    short* d;
++    int i, dy;
+     doom_boolean done = true;
+-
+-    width /= 2;
+-
+-    while (ticks--)
+-    {
+-        for (i = 0; i < width; i++)
+-        {
+-            if (y[i] < 0)
+-            {
+-                y[i]++; done = false;
+-            }
+-            else if (y[i] < height)
+-            {
+-                dy = (y[i] < 16) ? y[i] + 1 : 8;
++    int columns = width / 2;
++    while (ticks--) {
++        for (i = 0; i < columns; i++) {
++            if (y[i] < 0) { y[i]++; done = false; }
++            else if (y[i] < height) {
++                dy = y[i] < 16 ? y[i] + 1 : 8;
+                 if (y[i] + dy >= height) dy = height - y[i];
+-                s = &((short*)wipe_scr_end)[i * height + y[i]];
+-                d = &((short*)wipe_scr)[y[i] * width + i];
+-                idx = 0;
+-                for (j = dy; j; j--)
+-                {
+-                    d[idx] = *(s++);
+-                    idx += width;
+-                }
+                 y[i] += dy;
+-                s = &((short*)wipe_scr_start)[i * height];
+-                d = &((short*)wipe_scr)[y[i] * width + i];
+-                idx = 0;
+-                for (j = height - y[i]; j; j--)
+-                {
+-                    d[idx] = *(s++);
+-                    idx += width;
+-                }
+                 done = false;
+             }
+         }
+     }
+-
++    raster_melt(wipe_scr, wipe_scr_start, wipe_scr_end, y, width, height);
+     return done;
+ }
+ 
+@@ -12461,6 +12420,10 @@
+         sendsave = false;
+         cmd->buttons = BT_SPECIAL | BTS_SAVEGAME | (savegameslot << BTS_SAVESHIFT);
+     }
++    unsigned stick=*(volatile unsigned*)0x1e0u;
++    if(stick&3u)cmd->forwardmove=(signed char)((int)cmd->forwardmove*4/5);
++    if(stick&12u){cmd->sidemove=(signed char)((int)cmd->sidemove*4/5);cmd->angleturn=(short)((int)cmd->angleturn*4/5);}
++
+ }
+ 
+ 
+@@ -14428,17 +14391,12 @@
+ 
+ void HU_Drawer(void)
+ {
+-    HUlib_drawSText(&w_message);
+-    HUlib_drawIText(&w_chat);
+-    if (automapactive)
+-        HUlib_drawTextLine(&w_title, false);
++    /* GPU-only minimal scene; original HUD rendering intentionally omitted. */
+ }
+ 
+ void HU_Erase(void)
+ {
+-    HUlib_eraseSText(&w_message);
+-    HUlib_eraseIText(&w_chat);
+-    HUlib_eraseTextLine(&w_title);
++    /* GPU-only minimal scene; original HUD rendering intentionally omitted. */
+ }
+ 
+ void HU_Ticker(void)
+@@ -15824,108 +15782,7 @@
+ // This function currently supports only 16bit.
+ //
+ void I_UpdateSound(void)
+-{
+-    static int song_tick_progress = 0;
+-
+-    // Mix current sound data.
+-    // Data, from raw sound, for right and left.
+-    register unsigned int sample;
+-    register int dl;
+-    register int dr;
+-
+-    // Pointers in global mixbuffer, left, right, end.
+-    signed short* leftout;
+-    signed short* rightout;
+-    signed short* leftend;
+-    // Step in mixbuffer, left and right, thus two.
+-    int step;
+-
+-    // Mixing channel index.
+-    int chan;
+-
+-    // Do music first. [dsl] TODO: if we have embedded synth
+-      //static int song_progress = 0;
+-      //song_progress += 512;
+-      //while (song_progress > 0)
+-      //{
+-      //    TickSong(); // About 7 music ticks per sound sampling (X for doubt)
+-      //    song_progress -= 78;
+-      //}
+-
+-    // Left and right channel
+-    //  are in global mixbuffer, alternating.
+-    leftout = mixbuffer;
+-    rightout = mixbuffer + 1;
+-    step = 2;
+-
+-    // Determine end, for left channel only
+-    //  (right channel is implicit).
+-    leftend = mixbuffer + SAMPLECOUNT * step;
+-
+-    // Mix sounds into the mixing buffer.
+-    // Loop over step*SAMPLECOUNT,
+-    //  that is 512 values for two channels.
+-    while (leftout != leftend)
+-    {
+-        // Reset left/right value. 
+-        dl = 0;
+-        dr = 0;
+-
+-        // Love thy L2 chache - made this a loop.
+-        // Now more channels could be set at compile time
+-        //  as well. Thus loop those  channels.
+-        for (chan = 0; chan < NUM_CHANNELS; chan++)
+-        {
+-            // Check channel, if active.
+-            if (channels[chan])
+-            {
+-                // Get the raw data from the channel. 
+-                sample = *channels[chan];
+-                // Add left and right part
+-                //  for this channel (sound)
+-                //  to the current data.
+-                // Adjust volume accordingly.
+-                dl += channelleftvol_lookup[chan][sample];
+-                dr += channelrightvol_lookup[chan][sample];
+-                // Increment index ???
+-                channelstepremainder[chan] += channelstep[chan];
+-                // MSB is next sample???
+-                channels[chan] += channelstepremainder[chan] >> 16;
+-                // Limit to LSB???
+-                channelstepremainder[chan] &= 65536 - 1;
+-
+-                // Check whether we are done.
+-                if (channels[chan] >= channelsend[chan])
+-                    channels[chan] = 0;
+-            }
+-        }
+-
+-        // Clamp to range. Left hardware channel.
+-        // Has been char instead of short.
+-        // if (dl > 127) *leftout = 127;
+-        // else if (dl < -128) *leftout = -128;
+-        // else *leftout = dl;
+-
+-        if (dl > 0x7fff)
+-            *leftout = 0x7fff;
+-        else if (dl < -0x8000)
+-            *leftout = -0x8000;
+-        else
+-            *leftout = dl;
+-
+-        // Same for right hardware channel.
+-        if (dr > 0x7fff)
+-            *rightout = 0x7fff;
+-        else if (dr < -0x8000)
+-            *rightout = -0x8000;
+-        else
+-            *rightout = dr;
+-
+-        // Increment current pointers in mixbuffer.
+-        leftout += step;
+-        rightout += step;
+-    }
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ //extern doom_sound_callbacks_t doom_sound_callbacks;
+@@ -15940,8 +15797,7 @@
+ //  only output be done asynchronous?
+ //
+ void I_SubmitSound(void)
+-{
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void I_UpdateSoundParams(int handle, int vol, int sep, int pitch)
+@@ -15954,76 +15810,22 @@
+ 
+ 
+ void I_ShutdownSound(void)
+-{
+-    // Wait till all pending sounds are finished.
+-    int done = 0;
+-    int i;
+-
+-    // FIXME (below).
+-    doom_print("I_ShutdownSound: NOT finishing pending sounds\n");
+-
+-    while (!done)
+-    {
+-        for (i = 0; i < 8 && !channels[i]; i++);
+-
+-        // FIXME. No proper channel output.
+-        //if (i==8)
+-        done = 1;
+-    }
+-
+-    // Done.
+-    return;
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void I_InitSound()
+-{
+-    int i;
+-
+-    // Secure and configure sound device first.
+-    doom_print("I_InitSound: ");
+-
+-    // Initialize external data (all sounds) at start, keep static.
+-    doom_print("I_InitSound: ");
+-
+-    for (i = 1; i < NUMSFX; i++)
+-    {
+-        // Alias? Example is the chaingun sound linked to pistol.
+-        if (!S_sfx[i].link)
+-        {
+-            // Load data from WAD file.
+-            S_sfx[i].data = getsfx(S_sfx[i].name, &lengths[i]);
+-        }
+-        else
+-        {
+-            // Previously loaded already?
+-            S_sfx[i].data = S_sfx[i].link->data;
+-            lengths[i] = lengths[(S_sfx[i].link - S_sfx) / sizeof(sfxinfo_t)];
+-        }
+-    }
+-
+-    doom_print(" pre-cached all sound data\n");
+-
+-    // Now initialize mixbuffer with zero.
+-    for (i = 0; i < MIXBUFFERSIZE; i++)
+-        mixbuffer[i] = 0;
+-
+-    // Finished initialization.
+-    doom_print("I_InitSound: sound module ready\n");
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ //
+ // MUSIC API.
+ //
+ void I_InitMusic(void)
+-{
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void I_ShutdownMusic(void)
+-{
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void I_PlaySong(int handle, int looping)
+@@ -16461,6 +16263,7 @@
+ //
+ void I_ReadScreen(byte* scr)
+ {
++    raster_flush();
+     doom_memcpy(scr, screens[0], SCREENWIDTH * SCREENHEIGHT);
+ }
+ 
+@@ -21224,13 +21027,17 @@
+ 
+ fixed_t FixedDiv2(fixed_t a, fixed_t b)
+ {
+-    double c;
+-
+-    c = ((double)a) / ((double)b) * FRACUNIT;
+-
+-    if (c >= 2147483648.0 || c < -2147483648.0)
+-        I_Error("Error: FixedDiv: divide by zero");
+-    return (fixed_t)c;
++    unsigned ua = a < 0 ? 0u - (unsigned)a : (unsigned)a;
++    unsigned ub = b < 0 ? 0u - (unsigned)b : (unsigned)b;
++    if (!ub) { I_Error("Error: FixedDiv: divide by zero"); return 0; }
++    unsigned quotient = ua / ub, remainder = ua % ub;
++    for (unsigned i = 0; i < 16; ++i) {
++        quotient <<= 1;
++        if (remainder >= ub - remainder) { remainder -= ub - remainder; quotient |= 1; }
++        else remainder <<= 1;
++    }
++    return (a < 0) != (b < 0) ? (fixed_t)(0u - quotient) : (fixed_t)quotient;
++
+ }
+ #define SAVESTRINGSIZE 24
+ #define SKULLXOFF -32
+@@ -28937,6 +28744,16 @@
+     if (side == 1)
+         lineangle += ANG180;
+ 
++    if (slidemo->player) {
++        unsigned int tangent = lineangle >> ANGLETOFINESHIFT;
++        fixed_t tx = finecosine[tangent];
++        fixed_t ty = finesine[tangent];
++        fixed_t along = FixedMul(tmxmove, tx) + FixedMul(tmymove, ty);
++        tmxmove = FixedMul(along, tx);
++        tmymove = FixedMul(along, ty);
++        return;
++    }
++
+     moveangle = R_PointToAngle2(0, 0, tmxmove, tmymove);
+     deltaangle = moveangle - lineangle;
+ 
+@@ -30448,6 +30265,7 @@
+     player_t* player;
+     fixed_t xmove;
+     fixed_t ymove;
++    int consumed_half = 0;
+ 
+     if (!mo->momx && !mo->momy)
+     {
+@@ -30479,7 +30297,8 @@
+ 
+     do
+     {
+-        if (xmove > MAXMOVE / 2 || ymove > MAXMOVE / 2)
++        if (xmove > MAXMOVE / 2 || ymove > MAXMOVE / 2 ||
++            (player && (xmove < -MAXMOVE / 2 || ymove < -MAXMOVE / 2)))
+         {
+             ptryx = mo->x + xmove / 2;
+             ptryy = mo->y + ymove / 2;
+@@ -30493,12 +30312,20 @@
+             xmove = ymove = 0;
+         }
+ 
++        fixed_t pending_x = ptryx - mo->x + xmove;
++        fixed_t pending_y = ptryy - mo->y + ymove;
+         if (!P_TryMove(mo, ptryx, ptryy))
+         {
+             // blocked move
+             if (mo->player)
+             {        // try to slide along it
++                /* Slide consumes the whole remaining movement, not a full
++                   second movement in addition to the pending half-step. */
++                mo->momx = pending_x;
++                mo->momy = pending_y;
+                 P_SlideMove(mo);
++                if (consumed_half) { mo->momx *= 2; mo->momy *= 2; }
++                xmove = ymove = 0;
+             }
+             else if (mo->flags & MF_MISSILE)
+             {
+@@ -30518,6 +30345,7 @@
+             else
+                 mo->momx = mo->momy = 0;
+         }
++        else if (xmove || ymove) consumed_half = 1;
+     } while (xmove || ymove);
+ 
+     // slow down
+@@ -37552,15 +37380,21 @@
+ // be used. It has also been used with Wolfenstein 3D.
+ // 
+ void R_DrawColumn(void)
+-{
++{ raster_column(); }
++
++
++void R_DrawColumnLow(void)
++{
++    raster_flush();
+     int count;
+     byte* dest;
++    byte* dest2;
+     fixed_t frac;
+     fixed_t fracstep;
+ 
+     count = dc_yh - dc_yl;
+ 
+-    // Zero length, column does not exceed a pixel.
++    // Zero length.
+     if (count < 0)
+         return;
+ 
+@@ -37580,63 +37414,6 @@
+         I_Error(error_buf);
+     }
+ #endif 
+-
+-    // Framebuffer destination address.
+-    // Use ylookup LUT to avoid multiply with ScreenWidth.
+-    // Use columnofs LUT for subwindows? 
+-    dest = ylookup[dc_yl] + columnofs[dc_x];
+-
+-    // Determine scaling,
+-    //  which is the only mapping to be done.
+-    fracstep = dc_iscale;
+-    frac = dc_texturemid + (dc_yl - centery) * fracstep;
+-
+-    // Inner loop that does the actual texture mapping,
+-    //  e.g. a DDA-lile scaling.
+-    // This is as fast as it gets.
+-    do
+-    {
+-        // Re-map color indices from wall texture column
+-        //  using a lighting/special effects LUT.
+-        *dest = dc_colormap[dc_source[(frac >> FRACBITS) & 127]];
+-
+-        dest += SCREENWIDTH;
+-        frac += fracstep;
+-
+-    } while (count--);
+-}
+-
+-
+-void R_DrawColumnLow(void)
+-{
+-    int count;
+-    byte* dest;
+-    byte* dest2;
+-    fixed_t frac;
+-    fixed_t fracstep;
+-
+-    count = dc_yh - dc_yl;
+-
+-    // Zero length.
+-    if (count < 0)
+-        return;
+-
+-#ifdef RANGECHECK 
+-    if ((unsigned)dc_x >= SCREENWIDTH
+-        || dc_yl < 0
+-        || dc_yh >= SCREENHEIGHT)
+-    {
+-        //I_Error("Error: R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x);
+-        
+-        doom_strcpy(error_buf, "Error: R_DrawColumn: ");
+-        doom_concat(error_buf, doom_itoa(dc_yl, 10));
+-        doom_concat(error_buf, " to ");
+-        doom_concat(error_buf, doom_itoa(dc_yh, 10));
+-        doom_concat(error_buf, " at ");
+-        doom_concat(error_buf, doom_itoa(dc_x, 10));
+-        I_Error(error_buf);
+-    }
+-#endif 
+     // Blocky mode, need to multiply by 2.
+     dc_x <<= 1;
+ 
+@@ -37672,6 +37449,7 @@
+ //
+ void R_DrawFuzzColumn(void)
+ {
++    raster_flush();
+     int count;
+     byte* dest;
+     fixed_t frac;
+@@ -37749,6 +37527,7 @@
+ //
+ void R_DrawTranslatedColumn(void)
+ {
++    raster_flush();
+     int count;
+     byte* dest;
+     fixed_t frac;
+@@ -37866,55 +37645,7 @@
+ //
+ // Draws the actual span.
+ void R_DrawSpan(void)
+-{
+-    fixed_t xfrac;
+-    fixed_t yfrac;
+-    byte* dest;
+-    int count;
+-    int spot;
+-
+-#ifdef RANGECHECK 
+-    if (ds_x2 < ds_x1
+-        || ds_x1<0
+-        || ds_x2 >= SCREENWIDTH
+-        || (unsigned)ds_y>SCREENHEIGHT)
+-    {
+-        //I_Error("Error: R_DrawSpan: %i to %i at %i",
+-        //        ds_x1, ds_x2, ds_y);
+-        
+-        doom_strcpy(error_buf, "Error: R_DrawSpan: ");
+-        doom_concat(error_buf, doom_itoa(ds_x1, 10));
+-        doom_concat(error_buf, " to ");
+-        doom_concat(error_buf, doom_itoa(ds_x2, 10));
+-        doom_concat(error_buf, " at ");
+-        doom_concat(error_buf, doom_itoa(ds_y, 10));
+-        I_Error(error_buf);
+-    }
+-#endif 
+-
+-    xfrac = ds_xfrac;
+-    yfrac = ds_yfrac;
+-
+-    dest = ylookup[ds_y] + columnofs[ds_x1];
+-
+-    // We do not check for zero spans here?
+-    count = ds_x2 - ds_x1;
+-
+-    do
+-    {
+-        // Current texture index in u,v.
+-        spot = ((yfrac >> (16 - 6)) & (63 * 64)) + ((xfrac >> 16) & 63);
+-
+-        // Lookup pixel from flat texture tile,
+-        //  re-index using light/colormap.
+-        *dest++ = ds_colormap[ds_source[spot]];
+-
+-        // Next step in u,v.
+-        xfrac += ds_xstep;
+-        yfrac += ds_ystep;
+-
+-    } while (count--);
+-}
++{ raster_span(); }
+ 
+ 
+ //
+@@ -37922,6 +37653,7 @@
+ //
+ void R_DrawSpanLow(void)
+ {
++    raster_flush();
+     fixed_t xfrac;
+     fixed_t yfrac;
+     byte* dest;
+@@ -38861,31 +38593,9 @@
+ void R_RenderPlayerView(player_t* player)
+ {
+     R_SetupFrame(player);
+-
+-    // Clear buffers.
+-    R_ClearClipSegs();
+-    R_ClearDrawSegs();
+-    R_ClearPlanes();
+-    R_ClearSprites();
+-
+-    // check for new console commands.
+     NetUpdate();
+-
+-    // The head node is the last node output.
+-    R_RenderBSPNode(numnodes - 1);
+-
+-    // Check for new console commands.
+-    NetUpdate();
+-
+-    R_DrawPlanes();
+-
+-    // Check for new console commands.
+-    NetUpdate();
+-
+-    R_DrawMasked();
+-
+-    // Check for new console commands.
+-    NetUpdate();
++    whole_render();
++    NetUpdate();NetUpdate();NetUpdate();
+ }
+ #define MAXVISPLANES        128
+ #define MAXOPENINGS        SCREENWIDTH*64
+@@ -41089,38 +40799,7 @@
+ //  allocates channel buffer, sets S_sfx lookup.
+ //
+ void S_Init(int sfxVolume, int musicVolume)
+-{
+-    int i;
+-
+-    //doom_print("S_Init: default sfx volume %d\n", sfxVolume);
+-    doom_print("S_Init: default sfx volume ");
+-    doom_print(doom_itoa(sfxVolume, 10));
+-    doom_print("\n");
+-
+-    // Whatever these did with DMX, these are rather dummies now.
+-    I_SetChannels();
+-
+-    S_SetSfxVolume(sfxVolume);
+-    // No music with Linux - another dummy.
+-    S_SetMusicVolume(musicVolume);
+-
+-    // Allocating the internal channels for mixing
+-    // (the maximum numer of sounds rendered
+-    // simultaneously) within zone memory.
+-    channels_s_sound =
+-        (channel_t*)Z_Malloc(numChannels * sizeof(channel_t), PU_STATIC, 0);
+-
+-    // Free all channels for use
+-    for (i = 0; i < numChannels; i++)
+-        channels_s_sound[i].sfxinfo = 0;
+-
+-    // no sounds are playing, and they are not mus_paused
+-    mus_paused = 0;
+-
+-    // Note that sounds have not been cached (yet).
+-    for (i = 1; i < NUMSFX; i++)
+-        S_sfx[i].lumpnum = S_sfx[i].usefulness = -1;
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ //
+@@ -41129,405 +40808,60 @@
+ //  determines music if any, changes music.
+ //
+ void S_Start(void)
+-{
+-    int cnum;
+-    int mnum;
+-
+-    // kill all playing sounds at start of level
+-    //  (trust me - a good idea)
+-    for (cnum = 0; cnum < numChannels; cnum++)
+-        if (channels_s_sound[cnum].sfxinfo)
+-            S_StopChannel(cnum);
+-
+-    // start new music for the level
+-    mus_paused = 0;
+-
+-    if (gamemode == commercial)
+-        mnum = mus_runnin + gamemap - 1;
+-    else
+-    {
+-        int spmus[] =
+-        {
+-            // Song - Who? - Where?
+-
+-            mus_e3m4,        // American        e4m1
+-            mus_e3m2,        // Romero        e4m2
+-            mus_e3m3,        // Shawn        e4m3
+-            mus_e1m5,        // American        e4m4
+-            mus_e2m7,        // Tim         e4m5
+-            mus_e2m4,        // Romero        e4m6
+-            mus_e2m6,        // J.Anderson        e4m7 CHIRON.WAD
+-            mus_e2m5,        // Shawn        e4m8
+-            mus_e1m9        // Tim                e4m9
+-        };
+-
+-        if (gameepisode < 4)
+-            mnum = mus_e1m1 + (gameepisode - 1) * 9 + gamemap - 1;
+-        else
+-            mnum = spmus[gamemap - 1];
+-    }
+-
+-    // HACK FOR COMMERCIAL
+-    //  if (commercial && mnum > mus_e3m9)        
+-    //      mnum -= mus_e3m9;
+-
+-    S_ChangeMusic(mnum, true);
+-
+-    nextcleanup = 15;
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void S_StartSoundAtVolume(void* origin_p, int sfx_id, int volume)
+-{
+-    int                rc;
+-    int                sep;
+-    int                pitch;
+-    int                priority;
+-    sfxinfo_t*         sfx;
+-    int                cnum;
+-
+-    mobj_t* origin = (mobj_t*)origin_p;
+-
+-    // check for bogus sound #
+-    if (sfx_id < 1 || sfx_id > NUMSFX)
+-    {
+-        //I_Error("Error: Bad sfx #: %d", sfx_id);
+-        doom_strcpy(error_buf, "Error: Bad sfx #: ");
+-        doom_concat(error_buf, doom_itoa(sfx_id, 10));
+-        I_Error(error_buf);
+-    }
+-
+-    sfx = &S_sfx[sfx_id];
+-
+-    // Initialize sound parameters
+-    if (sfx->link)
+-    {
+-        pitch = sfx->pitch;
+-        priority = sfx->priority;
+-        volume += sfx->volume;
+-
+-        if (volume < 1)
+-            return;
+-
+-        if (volume > snd_SfxVolume)
+-            volume = snd_SfxVolume;
+-    }
+-    else
+-    {
+-        pitch = NORM_PITCH;
+-        priority = NORM_PRIORITY;
+-    }
+-
+-    // Check to see if it is audible,
+-    //  and if not, modify the params
+-    if (origin && origin != players[consoleplayer].mo)
+-    {
+-        rc = S_AdjustSoundParams(players[consoleplayer].mo,
+-                                 origin,
+-                                 &volume,
+-                                 &sep,
+-                                 &pitch);
+-
+-        if (origin->x == players[consoleplayer].mo->x
+-            && origin->y == players[consoleplayer].mo->y)
+-        {
+-            sep = NORM_SEP;
+-        }
+-
+-        if (!rc)
+-            return;
+-    }
+-    else
+-    {
+-        sep = NORM_SEP;
+-    }
+-
+-    // hacks to vary the sfx pitches
+-    if (sfx_id >= sfx_sawup
+-        && sfx_id <= sfx_sawhit)
+-    {
+-        pitch += 8 - (M_Random() & 15);
+-
+-        if (pitch < 0)
+-            pitch = 0;
+-        else if (pitch > 255)
+-            pitch = 255;
+-    }
+-    else if (sfx_id != sfx_itemup
+-             && sfx_id != sfx_tink)
+-    {
+-        pitch += 16 - (M_Random() & 31);
+-
+-        if (pitch < 0)
+-            pitch = 0;
+-        else if (pitch > 255)
+-            pitch = 255;
+-    }
+-
+-    // kill old sound
+-    S_StopSound(origin);
+-
+-    // try to find a channel
+-    cnum = S_getChannel(origin, sfx);
+-
+-    if (cnum < 0)
+-        return;
+-
+-    //
+-    // This is supposed to handle the loading/caching.
+-    // For some odd reason, the caching is done nearly
+-    //  each time the sound is needed?
+-    //
+-
+-    // get lumpnum if necessary
+-    if (sfx->lumpnum < 0)
+-        sfx->lumpnum = I_GetSfxLumpNum(sfx);
+-
+-#ifndef SNDSRV
+-    // cache data if necessary
+-    if (!sfx->data)
+-    {
+-        doom_print(
+-                "S_StartSoundAtVolume: 16bit and not pre-cached - wtf?\n");
+-
+-        // DOS remains, 8bit handling
+-        //sfx->data = (void *) W_CacheLumpNum(sfx->lumpnum, PU_MUSIC);
+-        // fprintf( stderr,
+-        //             "S_StartSoundAtVolume: loading %d (lump %d) : 0x%x\n",
+-        //       sfx_id, sfx->lumpnum, (int)sfx->data );
+-
+-    }
+-#endif
+-
+-    // increase the usefulness
+-    if (sfx->usefulness++ < 0)
+-        sfx->usefulness = 1;
+-
+-    // Assigns the handle to one of the channels in the
+-    //  mix/output buffer.
+-    channels_s_sound[cnum].handle = I_StartSound(sfx_id,
+-                                         /*sfx->data,*/
+-                                         volume,
+-                                         sep,
+-                                         pitch,
+-                                         priority);
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void S_StartSound(void* origin, int sfx_id)
+-{
+-    S_StartSoundAtVolume(origin, sfx_id, snd_SfxVolume);
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void S_StopSound(void* origin)
+-{
+-    int cnum;
+-
+-    for (cnum = 0; cnum < numChannels; cnum++)
+-    {
+-        if (channels_s_sound[cnum].sfxinfo && channels_s_sound[cnum].origin == origin)
+-        {
+-            S_StopChannel(cnum);
+-            break;
+-        }
+-    }
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ //
+ // Stop and resume music, during game PAUSE.
+ //
+ void S_PauseSound(void)
+-{
+-    if (mus_playing_s_sound && !mus_paused)
+-    {
+-        I_PauseSong(mus_playing_s_sound->handle);
+-        mus_paused = true;
+-    }
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void S_ResumeSound(void)
+-{
+-    if (mus_playing_s_sound && mus_paused)
+-    {
+-        I_ResumeSong(mus_playing_s_sound->handle);
+-        mus_paused = false;
+-    }
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ //
+ // Updates music & sounds
+ //
+ void S_UpdateSounds(void* listener_p)
+-{
+-    int audible;
+-    int cnum;
+-    int volume;
+-    int sep;
+-    int pitch;
+-    sfxinfo_t* sfx;
+-    channel_t* c;
+-
+-    mobj_t* listener = (mobj_t*)listener_p;
+-
+-    for (cnum = 0; cnum < numChannels; cnum++)
+-    {
+-        c = &channels_s_sound[cnum];
+-        sfx = c->sfxinfo;
+-
+-        if (c->sfxinfo)
+-        {
+-            if (I_SoundIsPlaying(c->handle))
+-            {
+-                // initialize parameters
+-                volume = snd_SfxVolume;
+-                pitch = NORM_PITCH;
+-                sep = NORM_SEP;
+-
+-                if (sfx->link)
+-                {
+-                    pitch = sfx->pitch;
+-                    volume += sfx->volume;
+-                    if (volume < 1)
+-                    {
+-                        S_StopChannel(cnum);
+-                        continue;
+-                    }
+-                    else if (volume > snd_SfxVolume)
+-                    {
+-                        volume = snd_SfxVolume;
+-                    }
+-                }
+-
+-                // check non-local sounds for distance clipping
+-                //  or modify their params
+-                if (c->origin && listener_p != c->origin)
+-                {
+-                    audible = S_AdjustSoundParams(listener,
+-                                                  c->origin,
+-                                                  &volume,
+-                                                  &sep,
+-                                                  &pitch);
+-
+-                    if (!audible)
+-                    {
+-                        S_StopChannel(cnum);
+-                    }
+-                    else
+-                        I_UpdateSoundParams(c->handle, volume, sep, pitch);
+-                }
+-            }
+-            else
+-            {
+-                // if channel is allocated but sound has stopped,
+-                //  free it
+-                S_StopChannel(cnum);
+-            }
+-        }
+-    }
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void S_SetMusicVolume(int volume)
+-{
+-    if (volume < 0 || volume > 127)
+-    {
+-        //I_Error("Error: Attempt to set music volume at %d",
+-        //        volume);
+-        doom_strcpy(error_buf, "Error: Attempt to set music volume at ");
+-        doom_concat(error_buf, doom_itoa(volume, 10));
+-        I_Error(error_buf);
+-    }
+-
+-    I_SetMusicVolume(127);
+-    I_SetMusicVolume(volume);
+-    snd_MusicVolume = volume;
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void S_SetSfxVolume(int volume)
+-{
+-    if (volume < 0 || volume > 127)
+-    {
+-        //I_Error("Error: Attempt to set sfx volume at %d", volume);
+-        doom_strcpy(error_buf, "Error: Attempt to set sfx volume at ");
+-        doom_concat(error_buf, doom_itoa(volume, 10));
+-        I_Error(error_buf);
+-    }
+-
+-    snd_SfxVolume = volume;
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ //
+ // Starts some music with the music id found in sounds.h.
+ //
+ void S_StartMusic(int m_id)
+-{
+-    S_ChangeMusic(m_id, false);
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void S_ChangeMusic(int musicnum, int looping)
+-{
+-    musicinfo_t* music;
+-    char namebuf[9];
+-
+-    if ((musicnum <= mus_None)
+-        || (musicnum >= NUMMUSIC))
+-    {
+-        //I_Error("Error: Bad music number %d", musicnum);
+-        doom_strcpy(error_buf, "Error: Bad music number ");
+-        doom_concat(error_buf, doom_itoa(musicnum, 10));
+-        I_Error(error_buf);
+-    }
+-    else
+-        music = &S_music[musicnum];
+-
+-    if (mus_playing_s_sound == music)
+-        return;
+-
+-    // shutdown old music
+-    S_StopMusic();
+-
+-    // get lumpnum if neccessary
+-    if (!music->lumpnum)
+-    {
+-        //doom_sprintf(namebuf, "d_%s", music->name);
+-        doom_strcpy(namebuf, "d_");
+-        doom_concat(namebuf, music->name);
+-        music->lumpnum = W_GetNumForName(namebuf);
+-    }
+-
+-    // load & register it
+-    music->data = (void*)W_CacheLumpNum(music->lumpnum, PU_MUSIC);
+-    music->handle = I_RegisterSong(music->data);
+-
+-    // play it
+-    I_PlaySong(music->handle, looping);
+-
+-    mus_playing_s_sound = music;
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void S_StopMusic(void)
+-{
+-    if (mus_playing_s_sound)
+-    {
+-        if (mus_paused)
+-            I_ResumeSong(mus_playing_s_sound->handle);
+-
+-        I_StopSong(mus_playing_s_sound->handle);
+-        I_UnRegisterSong(mus_playing_s_sound->handle);
+-        Z_ChangeTag(mus_playing_s_sound->data, PU_CACHE);
+-
+-        mus_playing_s_sound->data = 0;
+-        mus_playing_s_sound = 0;
+-    }
+-}
++{ /* Audio omitted from this build. */ }
+ 
+ 
+ void S_StopChannel(int cnum)
+@@ -42980,23 +42314,7 @@
+ 
+ void ST_Drawer(doom_boolean fullscreen, doom_boolean refresh)
+ {
+-    st_statusbaron = (!fullscreen) || automapactive;
+-    st_firsttime = st_firsttime || refresh;
+-
+-    // Do red-/gold-shifts from damage/items
+-    ST_doPaletteStuff();
+-
+-    // If just after ST_Start(), refresh all
+-    if (doom_flags & DOOM_FLAG_MENU_DARKEN_BG)
+-    {
+-        ST_doRefresh();
+-    }
+-    else
+-    {
+-        if (st_firsttime) ST_doRefresh();
+-        // Otherwise, update as little as possible
+-        else ST_diffDraw();
+-    }
++    ST_doPaletteStuff(); /* Preserve palette initialization and damage/item flashes. */
+ }
+ 
+ 
+@@ -45553,6 +44871,7 @@
+                 int desty,
+                 int destscrn)
+ {
++    raster_flush();
+     byte* src;
+     byte* dest;
+ 
+@@ -45590,6 +44909,7 @@
+ //
+ void V_DrawPatch(int x, int y, int scrn, patch_t* patch)
+ {
++    raster_flush();
+     int count;
+     int col;
+     column_t* column;
+@@ -45657,6 +44977,7 @@
+ //
+ void V_DrawPatchFlipped(int x, int y, int scrn, patch_t* patch)
+ {
++    raster_flush();
+     int count;
+     int col;
+     column_t* column;
+@@ -45717,6 +45038,7 @@
+ 
+ void V_DrawPatchRectDirect(int x, int y, int scrn, patch_t* patch, int src_x, int src_w)
+ {
++    raster_flush();
+     int count;
+     int col;
+     column_t* column;
+@@ -45783,6 +45105,7 @@
+ //
+ void V_DrawPatchDirect(int x, int y, int scrn, patch_t* patch)
+ {
++    raster_flush();
+     V_DrawPatch(x, y, scrn, patch);
+ }
+ 
+@@ -45793,6 +45116,7 @@
+ //
+ void V_DrawBlock(int x, int y, int scrn, int width, int height, byte* src)
+ {
++    raster_flush();
+     byte* dest;
+ 
+ #ifdef RANGECHECK 
+@@ -45825,6 +45149,7 @@
+ //
+ void V_GetBlock(int x, int y, int scrn, int width, int height, byte* dest)
+ {
++    raster_flush();
+     byte* src;
+ 
+ #ifdef RANGECHECK 
+@@ -48241,6 +47566,7 @@
+ //
+ void Z_Free(void* ptr)
+ {
++    raster_flush();
+     memblock_t* block;
+     memblock_t* other;
+ 
+@@ -48298,6 +47624,7 @@
+ //
+ void* Z_Malloc(int size, int tag, void* user)
+ {
++    raster_flush();
+     int extra;
+     memblock_t* start;
+     memblock_t* rover;

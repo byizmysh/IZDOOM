@@ -1,0 +1,44 @@
+{
+  "version": "0.17.1",
+  "externalRuntimeLibraries": [],
+  "unresolvedSymbols": [],
+  "dynamicLoader": false,
+  "moduleDependencies": [],
+  "hostRuntime": false,
+  "hostServerFiles": [],
+  "pythonBuildImports": [
+    "argparse",
+    "assets",
+    "hashlib",
+    "json",
+    "pathlib",
+    "re",
+    "shutil",
+    "struct",
+    "subprocess",
+    "sys",
+    "zipfile",
+    "zlib"
+  ],
+  "allQuotedIncludesBundled": true,
+  "quotedIncludeCount": 16,
+  "thirdPartySourceBundled": [
+    "DOOM/PureDOOM (GPL v2)",
+    "IZ2W SDK interface headers (MIT)"
+  ],
+  "requiredRuntimePlatform": "IZ2W / IZ2S Platform GPU ABI",
+  "soundEffects": false,
+  "music": false,
+  "manualReplayFlag": 0,
+  "localBoot": {
+    "frames": 140,
+    "fault": 0,
+    "scenes": 98,
+    "sceneCaptured": 1,
+    "logicalTicks": 140,
+    "dropped": 0,
+    "dispatches": 516,
+    "guestInstructions": 12991023
+  },
+  "newConsoleTest": "Not run: console disconnected when panel entry was registered."
+}

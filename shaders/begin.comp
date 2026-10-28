@@ -1,0 +1,28 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#include "../sdk/include/state.glsl"
+#include "../sdk/include/hb.glsl"
+layout(set=0,binding=1,std430) buffer VmMemory { uint words[]; } vm;
+layout(local_size_x=1) in;
+#define MEM(a) vm.words[(a)>>2u]
+#include "../src/pacing-clock.h"
+#include "../src/presentation-count.h"
+#include "../src/diagnostic-ring.h"
+void main(){
+ presentationCountBegin();
+ uint b=hbButtons();if((hbPressed()&HB_MINUS)!=0u)hbExit();
+ uint inputBits=0u;
+ if((b&HB_UP)!=0u||hbStick(false).y>.3)inputBits|=1u;
+ if((b&HB_DOWN)!=0u||hbStick(false).y<-.3)inputBits|=2u;
+ if((b&HB_LEFT)!=0u||hbStick(false).x<-.3)inputBits|=4u;
+ if((b&HB_RIGHT)!=0u||hbStick(false).x>.3)inputBits|=8u;
+ if((b&(HB_A|HB_R))!=0u)inputBits|=16u;if((b&(HB_B|HB_L))!=0u)inputBits|=32u;
+ if((b&HB_PLUS)!=0u)inputBits|=64u;if((b&HB_X)!=0u)inputBits|=128u;if((b&HB_Y)!=0u)inputBits|=256u;
+ uint stickBits=0u;vec2 stick=hbStick(false);
+ if(stick.y>.3&&(b&HB_UP)==0u)stickBits|=1u;if(stick.y<-.3&&(b&HB_DOWN)==0u)stickBits|=2u;
+ if(stick.x<-.3&&(b&HB_LEFT)==0u)stickBits|=4u;if(stick.x>.3&&(b&HB_RIGHT)==0u)stickBits|=8u;
+ MEM(0x1e0u)=stickBits;
+ const uint clockWord=(0x700d70u-1024u)/4u;
+ diagnosticRingBegin(c.atlas[clockWord],c.atlas[clockWord+1u]);
+ pacingBegin(c.atlas[clockWord],c.atlas[clockWord+1u],c.atlas[clockWord+2u],inputBits);hbEndFrame();
+}

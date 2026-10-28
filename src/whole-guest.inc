@@ -1,0 +1,48 @@
+typedef char sw_forward_signed[((__typeof__(((ticcmd_t*)0)->forwardmove))-1<0)?1:-1];
+typedef char sw_side_signed[((__typeof__(((ticcmd_t*)0)->sidemove))-1<0)?1:-1];
+typedef char sw_sector_size[(sizeof(sector_t)==88)?1:-1];
+typedef char sw_sector_count[(__builtin_offsetof(sector_t,linecount)==80)?1:-1];
+typedef char sw_sector_lines[(__builtin_offsetof(sector_t,lines)==84)?1:-1];
+typedef char sl_side_size[(sizeof(side_t)==20)?1:-1];
+typedef char sl_side_mid[(__builtin_offsetof(side_t,midtexture)==12)?1:-1];
+typedef char sl_player_size[(sizeof(player_t)==280)?1:-1];
+typedef char sl_player_psprites[(__builtin_offsetof(player_t,psprites)==244)?1:-1];
+typedef char sl_player_cards[(__builtin_offsetof(player_t,cards)==68)?1:-1];
+typedef char sl_player_weaponowned[(__builtin_offsetof(player_t,weaponowned)==120)?1:-1];
+typedef char sl_player_ammo[(__builtin_offsetof(player_t,ammo)==156)?1:-1];
+typedef char sl_player_maxammo[(__builtin_offsetof(player_t,maxammo)==172)?1:-1];
+typedef char sl_state_sprite[(__builtin_offsetof(state_t,sprite)==0)?1:-1];
+typedef char sl_state_frame[(__builtin_offsetof(state_t,frame)==4)?1:-1];
+typedef char sl_actor_sprite[(__builtin_offsetof(mobj_t,sprite)==36)?1:-1];
+typedef char sl_actor_frame[(__builtin_offsetof(mobj_t,frame)==40)?1:-1];
+/* Scene data is read-only during service7; game execution resumes after GPU completion. */
+typedef char whole_line_size[(sizeof(line_t)==64)?1:-1];
+typedef char whole_line_front[(__builtin_offsetof(line_t,frontsector)==48)?1:-1];
+typedef char whole_line_back[(__builtin_offsetof(line_t,backsector)==52)?1:-1];
+typedef char whole_sector_size[(sizeof(sector_t)==88)?1:-1];
+typedef char whole_sector_ceil[(__builtin_offsetof(sector_t,ceilingheight)==4)?1:-1];
+typedef char whole_sector_light[(__builtin_offsetof(sector_t,lightlevel)==12)?1:-1];
+typedef char actor_thinker_size[(sizeof(thinker_t)==12)?1:-1];
+typedef char actor_mobj_size[(sizeof(mobj_t)==156)?1:-1];
+typedef char actor_next_offset[(__builtin_offsetof(thinker_t,next)==4)?1:-1];
+typedef char actor_function_offset[(__builtin_offsetof(thinker_t,function)==8)?1:-1];
+typedef char actor_flags_offset[(__builtin_offsetof(mobj_t,flags)==104)?1:-1];
+static void whole_render(void){
+ volatile uint32_t*p=(volatile uint32_t*)0x400;
+ p[1]=(uint32_t)(uintptr_t)screens[0];p[2]=(uint32_t)viewx;p[3]=(uint32_t)viewy;p[4]=(uint32_t)viewz;
+ p[5]=(uint32_t)viewcos;p[6]=(uint32_t)viewsin;p[7]=(uint32_t)numlines;p[8]=(uint32_t)(uintptr_t)lines;
+ p[9]=(uint32_t)viewwidth;p[10]=(uint32_t)viewheight;p[11]=(uint32_t)players[consoleplayer].health;
+ p[12]=(uint32_t)numsectors;p[13]=(uint32_t)(uintptr_t)sectors;
+ p[14]=(uint32_t)(uintptr_t)&thinkercap;p[15]=(uint32_t)(uintptr_t)P_MobjThinker;p[16]=(uint32_t)(uintptr_t)players[consoleplayer].mo;
+ p[17]=(uint32_t)(uintptr_t)sides;p[18]=(uint32_t)(uintptr_t)texturetranslation;
+ p[19]=(uint32_t)(uintptr_t)&players[consoleplayer];p[20]=(uint32_t)viewangle;
+ p[21]=(uint32_t)numsides;p[22]=(uint32_t)numtextures;p[23]=(uint32_t)skyflatnum;
+ p[24]=(uint32_t)players[consoleplayer].armorpoints;
+ int ammoType=weaponinfo[players[consoleplayer].readyweapon].ammo;
+ p[25]=(ammoType>=0&&ammoType<NUMAMMO)?(uint32_t)players[consoleplayer].ammo[ammoType]:0u;
+ p[26]=(uint32_t)st_faceindex;
+ p[27]=(ammoType>=0&&ammoType<NUMAMMO)?1u:0u;
+ p[0]=1;
+ register uint32_t operation __asm__("a7")=7;
+ __asm__ volatile("ecall"::"r"(operation):"memory");
+}

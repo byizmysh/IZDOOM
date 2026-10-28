@@ -1,0 +1,11 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+layout(local_size_x=1) in;
+layout(set=0,binding=1,std430) buffer VmMemory { uint words[]; } vm;
+#define MEM(a) vm.words[(a)>>2u]
+#define U(x) uint(x)
+#define I(x) int(x)
+#define LOG_LINE(a)
+#define VM_GPU_SHARED_REGS 1
+#include "../src/rv32-core.h"
+void main(){vmRun(262144u);}

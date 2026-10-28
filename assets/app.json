@@ -1,0 +1,26 @@
+{
+  "format": "hblauncher.gpu-app",
+  "abi": 1,
+  "id": "izdoom",
+  "name": "IZDOOM",
+  "version": "0.17.1",
+  "description": "Silent GPU DOOM: full textures, original sprites/HUD, smooth melt, 80% stick sensitivity; no audio host component",
+  "icon": "icon.png",
+  "initialState": "state.bin",
+  "data": "data.bin",
+  "shaders": {
+    "vertex": "app.vert.spv",
+    "fragment": "app.frag.spv",
+    "compute": "app.comp.spv"
+  },
+  "memory": {
+    "initial": "memory.bin.deflate",
+    "bytes": 33554432,
+    "encoding": "deflate"
+  },
+  "computeSequence": {
+    "begin": "begin.comp.spv",
+    "after": "after.comp.spv",
+    "repeat": 2
+  }
+}

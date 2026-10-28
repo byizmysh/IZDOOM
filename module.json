@@ -1,0 +1,40 @@
+{
+  "format": "izlauncher.module",
+  "formatVersion": 1,
+  "apiVersion": 1,
+  "id": "izdoom",
+  "name": "IZDOOM",
+  "version": "0.17.1",
+  "moduleVersion": "0.17.1",
+  "author": "IZMYSH contributors; DOOM by id Software; PureDOOM by its contributors",
+  "platforms": [
+    "linux-x64",
+    "linux-arm64"
+  ],
+  "requires": {
+    "platformApi": 1,
+    "shell": "izlauncher",
+    "consoleAbi": 1
+  },
+  "switch": {
+    "entry": "switch/app.json",
+    "files": [
+      "switch/app.json",
+      "switch/icon.png",
+      "switch/state.bin",
+      "switch/data.bin",
+      "switch/memory.bin.deflate",
+      "switch/app.vert.spv",
+      "switch/app.frag.spv",
+      "switch/app.comp.spv",
+      "switch/begin.comp.spv",
+      "switch/after.comp.spv"
+    ],
+    "abi": 1
+  },
+  "package": "izdoom.izm",
+  "capabilities": {},
+  "dependencies": [],
+  "settingsSchema": [],
+  "license": "GPL-2.0-only"
+}
