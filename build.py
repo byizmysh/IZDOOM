@@ -65,7 +65,7 @@ def main():
     report={'built':True,'consoleExecuted':False,'id':'izdoom','version':'0.17.1',
         'archive':str(archive),'sha256':sha(archive.read_bytes()),'guestBytes':len(guest),
         'memoryBytes':len(memory),'assetBytes':len(resources),'wadSha256':sha(wad),
-        'manualControls':True,'sourceVersion':'preserved silent 0.17, accepted 80% stick and crosshair removal',
+        'manualControls':True,'sourceVersion':'preserved 0.17, accepted 80% stick and crosshair removal',
         'distribution':'Local build includes user-provided game data; source release excludes it.'}
     (out/'build-report.json').write_text(json.dumps(report,indent=2)+'\n')
     (out/'assets.json').write_text(json.dumps(assets,indent=2)+'\n')

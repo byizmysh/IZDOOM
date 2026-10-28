@@ -4,7 +4,7 @@
   "id": "izdoom",
   "name": "IZDOOM",
   "version": "0.17.1",
-  "description": "Silent GPU DOOM: full textures, original sprites/HUD, smooth melt, 80% stick sensitivity; no audio host component",
+  "description": "GPU DOOM for NS2: full textures, original sprites/HUD, smooth level transitions and 80% stick sensitivity",
   "icon": "icon.png",
   "initialState": "state.bin",
   "data": "data.bin",

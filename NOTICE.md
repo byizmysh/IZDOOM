@@ -24,6 +24,6 @@ header. It is preserved verbatim, alongside the GPL license file carried by
 the pinned PureDOOM repository and the official id Software GPL release.
 No proprietary game-data permission is inferred from either source license.
 
-The IZ2W launcher is a separately installed platform dependency. This silent
+The IZ2W launcher is a separately installed platform dependency. This
 module has no BlitBun dependency or host audio service. This source distribution
 does not include a launcher, bootstrap or console firmware/SDK binary.

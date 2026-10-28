@@ -1,5 +1,4 @@
 {
-  "silentBaselineVersion": "0.17.0",
   "preservedPackageSha256": "9fe549612d4194618fa167f0f57df1cc7115c2db088df2dfb7451105d8f4443e",
   "preservedFingerprint": "048152070866d9ac8ecf60f76717accbb3e6d5a98d34e4893fb8e1e969be2fe0",
   "baselineIntegrityVerified": true,
@@ -12,5 +11,6 @@
     "no crosshair",
     "IZDOOM icon with small IZMYSH credit"
   ],
-  "newPhysicalTestPending": true
+  "newPhysicalTestPending": true,
+  "preservedBaselineVersion": "0.17.0"
 }
