@@ -8,6 +8,6 @@
   "licenseSource": "https://sources.debian.org/data/non-free/d/doom-wad-shareware/1.9.fixed-4/debian/copyright",
   "licenseFile": "LICENSES/DOOM1-SHAREWARE.txt",
   "licenseFileSha256": "1482321ff0640a41f039d771f7a2abe62b32ff76f6fd458c291cb981df94d083",
-  "sourceArchiveIncludesGameData": false,
+  "sourceArchiveIncludesGameData": true,
   "prebuiltModuleIncludesGameData": true
 }

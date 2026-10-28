@@ -39,7 +39,7 @@
         "game-data/DOOM1.WAD",
         "switch/memory.bin.deflate"
       ],
-      "distributedInSourceArchive": false,
+      "distributedInSourceArchive": true,
       "distributedInPrebuiltModule": true,
       "copyright": "id Software",
       "license": "id Software shareware terms with redistribution clarification",

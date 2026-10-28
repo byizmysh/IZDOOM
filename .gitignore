@@ -7,3 +7,6 @@ __pycache__/
 *.izm
 memory.bin*
 assets.bin
+
+# Audited freely distributable DOOM shareware v1.9 data only.
+!game-data/DOOM1.WAD

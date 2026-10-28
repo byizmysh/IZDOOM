@@ -38,9 +38,10 @@ PureDOOM is also possible, but would not make the source obligations disappear.
 
 ## IWAD and release artifacts
 
-The source license does not grant rights over DOOM game data. The source
-archives exclude the IWAD and derived runtime memory/resources. The separate
-prebuilt IZ2S module contains DOOM shareware v1.9 episode one, not a retail IWAD.
+The source license does not grant rights over DOOM game data. The source archive and prebuilt IZ2S module both include the original
+DOOM shareware v1.9 episode-one IWAD under its separate terms. The source
+archive excludes generated memory images and compiled modules; build.py
+reconstructs them from the included sources and data. No retail IWAD is bundled.
 
 The supplied 4,196,020-byte IWAD has MD5 f0cefca49926d00903cf57551d901abe
 and SHA-256 1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771.

@@ -13,13 +13,13 @@
 
 ## Исходники
 
-[**Скачать «Исходники»**](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/IZDOOM-v0.17.1-%D0%98%D1%81%D1%85%D0%BE%D0%B4%D0%BD%D0%B8%D0%BA%D0%B8.zip)
+[**Скачать «Исходники»**](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/IZDOOM-v0.17.1-Ishodniki.zip)
 
-Полный исходный код движка и порта, шейдеры, инструменты сборки, иконка и лицензии. Этот архив предназначен для самостоятельной сборки; для обычной установки используйте `.izm` выше.
+Полный исходный код движка и порта, шейдеры, инструменты сборки, иконка, лицензии и данные первого эпизода в `game-data/DOOM1.WAD`. Этот архив предназначен для самостоятельной сборки; для обычной установки используйте `.izm` выше.
 
 [**Инструкция по сборке из исходников**](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/BUILD-FROM-SOURCE.md)
 
 ## English
 
 - **Ready-to-load IZ2S module:** download the `.izm` above, copy it as `modules/izdoom/izdoom.izm` inside IZ2S Platform, refresh the app library and load/open IZDOOM. Episode-one data is included. [Installation guide](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/INSTALL-IZ2S.md).
-- **Sources:** download **Исходники / Sources**, extract and follow the [build guide](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/BUILD-FROM-SOURCE.md). All corresponding engine, shader and build sources are included; the original game data can be extracted from the ready module.
+- **Sources:** download **Исходники / Sources**, extract and follow the [build guide](https://github.com/byizmysh/IZDOOM/releases/download/v0.17.1/BUILD-FROM-SOURCE.md). All corresponding engine, shader and build sources and the original episode-one data are included.

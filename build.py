@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build IZDOOM from complete local sources and a user-supplied IWAD.
+"""Build IZDOOM from complete sources and bundled episode-one game data.
 
 No network, console connection, native caller or launcher bootstrap is used.
 The resulting module embeds derived game data: keep it local unless you have
@@ -17,7 +17,7 @@ def sha(data):return hashlib.sha256(data).hexdigest()
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--wad',required=True,type=Path,help='Your local DOOM1.WAD (not redistributed with source)')
+    parser.add_argument('--wad',type=Path,default=ROOT/'game-data/DOOM1.WAD',help='Original DOOM1.WAD; defaults to the bundled shareware episode')
     parser.add_argument('--output',type=Path,default=ROOT/'build')
     args=parser.parse_args();out=args.output.resolve();out.mkdir(parents=True,exist_ok=True)
     wad=args.wad.read_bytes()
@@ -68,7 +68,7 @@ def main():
         'archive':str(archive),'sha256':sha(archive.read_bytes()),'guestBytes':len(guest),
         'memoryBytes':len(memory),'assetBytes':len(resources),'wadSha256':sha(wad),
         'manualControls':True,'sourceVersion':'preserved 0.17, accepted 80% stick and crosshair removal',
-        'distribution':'Local build includes user-provided game data; source release excludes it.'}
+        'distribution':'Source and prebuilt releases include original DOOM shareware v1.9 under its separate terms.'}
     (out/'build-report.json').write_text(json.dumps(report,indent=2)+'\n')
     (out/'assets.json').write_text(json.dumps(assets,indent=2)+'\n')
     print(json.dumps(report,indent=2))
